@@ -2,7 +2,6 @@
 
 A unified platform for cybercrime investigators to manage cases, run AI-assisted analysis on digital evidence, gauge threat severity, and generate investigator-ready reports with recommended interventions — all while preserving a tamper-evident chain of custody.
 
-> **Status:** Architecture & implementation plan (pre-build). Academic project — team of 4, 1‑month timeline.
 
 ---
 
@@ -98,8 +97,6 @@ CyberFusion is split into **three tiers** plus a **shared evidence/integrity lay
 
 ## 4. Recommended Tech Stack
 
-You mentioned the stack isn't decided yet — here's a recommendation reasoned from your constraints (self-hosted + optionally live on Vercel, team of 4 similar skill level, 1-month academic timeline, pretrained-model-based AI):
-
 | Layer | Recommendation | Why |
 |---|---|---|
 | Frontend | **React + Vite**, Tailwind CSS | Fast dev loop, matches prior MERN experience, deploys cleanly to Vercel |
@@ -113,13 +110,11 @@ You mentioned the stack isn't decided yet — here's a recommendation reasoned f
 | Backend/AI hosting | **Self-hosted (your Debian homelab) via Docker**, or **Render/Railway** as a cloud fallback | Vercel's serverless functions are a poor fit for long-running Python ML inference (cold starts, execution time limits, no persistent GPU/CPU-heavy process) — keep the Core API + AI service off Vercel |
 | Report PDF export | **Puppeteer** (HTML→PDF) or **pdf-lib** | Puppeteer lets you template reports in HTML/CSS and render to PDF without a separate templating system |
 
-**A note on the Vercel + self-host split:** this is the one place I'd actively steer you away from an "everything on Vercel" setup. Vercel is excellent for the React frontend, but your AI/ML service will often need >10s per request (face matching, image forgery CNNs) and persistent dependencies (large model weights) — both work against serverless. Keep Core API + AI service on your homelab (or Render/Railway if you want it publicly reachable without exposing your home network), and only put the frontend on Vercel, calling your backend's public URL.
-
 ---
 
 ## 5. Data Model
 
-Core entities (illustrative — not final schema):
+Core entities:
 
 ```
 User          { id, name, email, passwordHash, role, createdAt }
@@ -139,7 +134,7 @@ Notification  { id, userId, type, message, read, createdAt }
 
 ## 6. Analysis Modules — Implementation Plan
 
-For each module: **what it does**, a **pretrained-model/API approach** (since you're not training your own models), and **implementation notes**. Difficulty is rated for your 1-month timeline.
+For each module: **what it does**, a **pretrained-model/API approach** , and **implementation notes**. 
 
 ### 1. Fake Social Media Profile Detection — *Medium*
 - **Approach:** Rule-based scoring (account age, follower/following ratio, post frequency, bio text patterns) combined with a lightweight pretrained text classifier (e.g., a HuggingFace bot-detection or spam-text model) on bio/post content, plus reverse image search on the profile picture.
@@ -197,8 +192,6 @@ For each module: **what it does**, a **pretrained-model/API approach** (since yo
 
 ## 7. Blockchain-Inspired Evidence Integrity
 
-This is **not** a real blockchain or distributed ledger — no consensus, no peers, no mining. It's a cryptographic **hash chain**, which gives you tamper-evidence (the core forensic requirement) without distributed-systems complexity:
-
 **Design:**
 1. On evidence upload, compute `SHA-256(file bytes)` → `evidenceHash`.
 2. Create an `IntegrityLog` entry: `{ evidenceId, action: "UPLOAD", entryHash: SHA-256(prevHash + evidenceHash + timestamp + actorId), prevHash, timestamp, actorId }`.
@@ -206,16 +199,14 @@ This is **not** a real blockchain or distributed ledger — no consensus, no pee
 4. **Verification:** recompute the chain from entry 1 forward; if any `entryHash` doesn't match, integrity is broken — surface this clearly in the UI ("⚠️ Evidence integrity check failed at step N").
 5. Optionally sign each entry with a server-held private key (HMAC or RSA) so even direct database tampering is detectable without needing a separate ledger.
 
-This gives you the chain-of-custody and tamper-detection features from the feature list honestly — just be precise in your report/demo that it's a **hash chain**, not a blockchain, so you don't overclaim to evaluators who know the difference.
 
 ---
 
 ## 8. Risk Scoring & Report Generation
 
 - Each `Analysis` result includes a per-module risk contribution (e.g., 0–100).
-- The **Cyber Triage module** aggregates all analyses tied to a case into an overall case risk score — a simple weighted average or max-severity approach is defensible for an academic project; document your formula clearly rather than treating it as a black box.
-- **Report Generation:** template an HTML report (case summary, evidence list with hashes, per-module findings, overall risk, recommendations) and render to PDF via Puppeteer. Optionally use an LLM to draft the human-readable "recommendations" section from structured findings — keep the structured data as the source of truth and the LLM output as assistive text, clearly labeled.
-
+- The **Cyber Triage module** aggregates all analyses tied to a case into an overall case risk score 
+- **Report Generation:** template an HTML report (case summary, evidence list with hashes, per-module findings, overall risk, recommendations) and render to PDF via Puppeteer. 
 ---
 
 ## 9. Authentication & Role-Based Access Control
@@ -227,7 +218,7 @@ This gives you the chain-of-custody and tamper-detection features from the featu
 | `analyst` | Upload evidence, run analysis modules, view findings — no case/user management |
 | `viewer` | Read-only access to assigned cases and reports |
 
-Implement with JWT access tokens (short-lived) + refresh tokens, middleware-enforced role checks on each Express route, and log every privileged action to `AuditLog`.
+Implemented with JWT access tokens (short-lived) + refresh tokens, middleware-enforced role checks on each Express route, and log every privileged action to `AuditLog`.
 
 ---
 
@@ -263,14 +254,8 @@ The AI/ML service exposes its own internal API (`POST /ai/{module}/analyze`), ca
 
 ## 11. Deployment Strategy
 
-**Self-hosted (homelab), with optional public access:**
-- `docker-compose.yml` brings up: `frontend` (dev only — prod frontend goes to Vercel), `core-api`, `ai-service`, `mongo` (or `postgres`), `minio`.
-- Expose `core-api` publicly (if needed for the Vercel frontend to reach it) via a reverse proxy (Caddy/Nginx) with HTTPS — you already run Docker in your homelab, so this fits your existing setup.
-
 **Frontend on Vercel:**
-- Deploy the React app to Vercel, pointing its API base URL at your homelab's public endpoint (or Render/Railway if you'd rather not expose your home network).
-
-**If you want zero homelab exposure:** deploy Core API + AI service to **Render** or **Railway** (both have free/cheap tiers that support long-running Docker containers, unlike Vercel's serverless model) and keep the homelab for development/testing only.
+- Deploy the React app to Vercel, pointing its API base URL at your homelab's public endpoint.
 
 ---
 
@@ -312,38 +297,7 @@ cyberfusion/
 
 ---
 
-## 13. 4-Week Roadmap (Team of 4)
-
-Given 12 modules + blockchain-inspired integrity + full case management in 1 month, **full build of all 12 modules is unrealistic for a 4-person team alongside coursework** — the plan below builds the full platform skeleton plus the MVP module tier (4 modules), with phase-2/3 modules stubbed with sample data for the demo if time runs out. Adjust module ownership to your team's actual strengths.
-
-**Week 1 — Foundation (all 4 members)**
-- Person A: Auth + RBAC (Core API)
-- Person B: Case & Evidence CRUD + file upload + SHA-256 hashing (Core API)
-- Person C: Frontend shell — routing, dashboard layout, auth pages
-- Person D: AI/ML service skeleton (FastAPI) + Docker Compose wiring all services together
-
-**Week 2 — MVP Modules + Integrity Chain**
-- Person A: Phishing URL/Domain module (Google Safe Browsing/VirusTotal integration)
-- Person B: Credit Card Fraud module (Kaggle dataset + trained classifier) + hash-chain `IntegrityLog`
-- Person C: Spam/Scam detection module + Frontend evidence upload/analysis UI
-- Person D: Fake News detection module + Frontend case management UI
-
-**Week 3 — Phase-2 Modules + Findings/Reporting**
-- Person A: Findings aggregation + risk scoring logic (Cyber Triage module, basic version)
-- Person B: Report generation (HTML → PDF via Puppeteer)
-- Person C: One phase-2 module (team's choice — Chat/Email Forensics or Fake Social Media)
-- Person D: One phase-2 module (team's choice — Malware/APK via MobSF, or Face Matching via `face_recognition`)
-
-**Week 4 — Polish, Admin Panel, Testing, Demo Prep**
-- Notifications + Audit Logs (whoever is ahead of schedule)
-- Admin panel (user/role management minimum viable version)
-- Bug fixing, seed data for any unbuilt modules (phase-3 modules can be demoed with pre-canned sample results + a note that live inference is future work)
-- Deployment: frontend → Vercel, backend/AI → homelab or Render
-- Report/presentation prep
-
----
-
-## 14. Security & Privacy Considerations
+## 13. Security & Privacy Considerations
 
 - **Evidence confidentiality:** encrypt evidence at rest (disk-level or MinIO server-side encryption) and in transit (HTTPS everywhere).
 - **Access control:** enforce RBAC at the API layer, not just the UI.
@@ -353,7 +307,7 @@ Given 12 modules + blockchain-inspired integrity + full case management in 1 mon
 
 ---
 
-## 15. Testing Strategy
+## 14. Testing Strategy
 
 - **Unit tests:** Core API route/controller logic (Jest), AI service module logic (pytest).
 - **Integration tests:** evidence upload → hash → analysis → finding pipeline end-to-end.
@@ -362,24 +316,7 @@ Given 12 modules + blockchain-inspired integrity + full case management in 1 mon
 
 ---
 
-## 16. Open Decisions & Known Limitations
-
-Still to be decided by the team (don't let these block starting Week 1):
-
-- [ ] Final choice: MongoDB vs PostgreSQL
-- [ ] Which 4 modules form the confirmed MVP set (recommendation: phishing, fraud, spam, fake news)
-- [ ] LLM provider for report-summary generation, if used (Claude API, OpenAI, or skip and keep reports fully template-based)
-- [ ] Public API keys/accounts needed: Google Safe Browsing, VirusTotal (free tier limits should be checked before relying on them for a live demo)
-- [ ] Whether network intrusion / log analysis modules are built live or demoed with static sample data (recommended: static sample data, given the 1-month timeline)
-
-**Known limitations to state openly in your project report:**
-- The "blockchain" is a hash chain, not a distributed ledger — no Byzantine fault tolerance, no multi-node consensus.
-- Pretrained models are used as-is, not fine-tuned on domain-specific data — expect lower accuracy than a production forensics tool.
-- 12 modules at varying depth within 1 month means some modules will necessarily be shallower (API-wrapper-level) than others.
-
----
-
-## 17. Suggested Datasets & Pretrained Resources
+## 15. Datasets & Pretrained Resources
 
 | Module | Suggested resource |
 |---|---|
@@ -393,8 +330,3 @@ Still to be decided by the team (don't let these block starting Week 1):
 | Network Intrusion | NSL-KDD, CICIDS2017 datasets |
 | Fake Social Profiles | Kaggle "Fake and Real Profile Detection" style datasets |
 
-All of the above are commonly used in open-source/academic projects and have free tiers or public download access — verify current licensing/terms before use in your submitted project.
-
----
-
-*This document is a living architecture plan — update it as the team makes final stack/module decisions during Week 1.*
